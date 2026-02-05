@@ -25,60 +25,53 @@ with st.sidebar:
     st.divider()
     st.caption("Powered by Gemini 1.5 Flash for high-volume auditing.")
 
-# --- Training Material Reference (The Knowledge Base) ---
+# --- Training Material Reference ---
 TRAINING_MATERIAL = """
-PILLARS: Motivation (Why), Price (Uncover expectations), Timeline (Urgency), Condition (Repairs/Age), Rapport (Trust/Mirroring).
+PILLARS: Motivation, Price, Timeline, Condition, Rapport.
 MODELS: CARE (Clarify, Acknowledge, Reframe, Explore).
-QUALIFICATION: Hot (Motivation + Price/Timeline < 30 days), Warm, Long-term.
-CREDIBILITY: Local family-owned, 6+ years experience, A+ BBB, buy as-is, no fees, flexible closing.
-OBJECTION EXAMPLES: "Price too low", "Not in a rush", "Need to find a place first".
+QUALIFICATION: Hot (2+ criteria), Warm, Long-term.
+CREDIBILITY: Local family-owned, A+ BBB, buy as-is, no fees, flexible closing.
 """
 
-# --- File Uploader ---
-uploaded_file = st.file_uploader("Upload Audio (wav, mp3) or Text (.txt)", type=['txt', 'wav', 'mp3', 'm4a'])
+uploaded_file = st.file_uploader("Upload Audio or Text", type=['txt', 'wav', 'mp3', 'm4a'])
 
-# Reset logic: Clear old analysis if a new file is uploaded
+# Reset logic when a new file is uploaded
 if uploaded_file is not None:
     if uploaded_file.name != st.session_state.last_uploaded_file:
         st.session_state.transcript = ""
         st.session_state.analysis = ""
         st.session_state.last_uploaded_file = uploaded_file.name
 
-# --- Model Discovery Function (Fixed & Prioritizing 1.5 Flash) ---
 def find_best_model(api_key):
     try:
         genai.configure(api_key=api_key)
         available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        # Priority 1: Gemini 1.5 Flash (High Quota)
         for m_name in available_models:
             if '1.5-flash' in m_name.lower(): 
-                return m_name
-        # Priority 2: Any other Flash model
-        for m_name in available_models:
-            if 'flash' in m_name.lower(): 
                 return m_name
         return available_models[0] if available_models else None
     except:
         return None
 
-# --- Main App Logic ---
 if uploaded_file and gemini_key:
     model_name = find_best_model(gemini_key)
     if model_name:
         model = genai.GenerativeModel(model_name)
-
         col1, col2 = st.columns(2)
+        
         with col1:
             if st.button("Step 1: Extract Transcript 📄"):
                 try:
                     with st.spinner("Processing file..."):
                         if uploaded_file.type.startswith('audio/'):
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
+                            # تقصير السطر ده عشان ميعملش Syntax Error
+                            suffix = f".{uploaded_file.name.split('.')[-1]}"
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
                                 tmp_file.write(uploaded_file.getvalue())
                                 tmp_path = tmp_file.name
+                            
                             audio_file = genai.upload_file(path=tmp_path)
-                            response = model.generate_content(["Provide a word-for-word transcript in English. Do not summarize.", audio_file])
+                            response = model.generate_content(["Provide a word-for-word transcript in English. No analysis.", audio_file])
                             st.session_state.transcript = response.text
                             os.remove(tmp_path)
                         else:
@@ -89,10 +82,55 @@ if uploaded_file and gemini_key:
 
         if st.session_state.transcript:
             st.subheader("📄 The Transcript")
-            st.text_area("Original Content:", st.session_state.transcript, height=200)
+            st.text_area("Content:", st.session_state.transcript, height=200)
             
             st.divider()
 
             if st.button("Step 2: Run Strategic Analysis 🚀"):
                 try:
-                    with
+                    with st.spinner("Auditing..."):
+                        strategic_prompt = f"""
+                        You are a Senior Real Estate Sales Auditor. 
+                        LANGUAGE: Respond in 100% ENGLISH. No Arabic.
+                        TASK: Audit the transcript based on the Training Material.
+
+                        TRAINING MATERIAL:
+                        {TRAINING_MATERIAL}
+
+                        REPORT STRUCTURE:
+                        ### **Notes**
+                        **Call summary:** (Provide a detailed paragraph summary)
+                        **Situation:** (Seller context)
+                        **Motivation / Pain:** (Why they sell)
+                        **Timeline:** (Urgency level)
+                        **Condition (high-level):** (Property details)
+                        **Price Expectation + reason:** (Price logic)
+                        **Decision Maker(s):** (Who is involved)
+                        **Objections / Concerns:** (Concerns raised)
+                        **Outcome / Next Step:** (Plan agreed)
+                        **Important Notes:** (Red flags)
+
+                        ---
+                        ### **Strengths**
+                        - (Detailed strengths based on training)
+                        ---
+                        ### **Areas to Improve (Detailed)**
+                        - (Analyze failures in CARE or Pillars)
+                        ---
+                        ### **Missed Opportunity (Detailed)**
+                        - (Specific pivots skipped)
+                        ---
+                        ### **Coach Tip (Exact sentence/question to use next time)**
+                        - (Exact script based on material)
+
+                        Transcript:
+                        {st.session_state.transcript}
+                        """
+                        analysis_response = model.generate_content(strategic_prompt)
+                        st.session_state.analysis = analysis_response.text
+                        st.success("✅ Analysis Complete!")
+
+    if st.session_state.analysis:
+        st.subheader("🧠 Strategic Audit Report")
+        st.markdown(st.session_state.analysis)
+        st.download_button("Download Report (.md)", st.session_state.analysis, file_name=f"Audit_{uploaded_file.name}.md")
