@@ -15,7 +15,7 @@ if 'last_file' not in st.session_state:
     st.session_state.last_file = None
 
 st.title("🎙️ AI Strategic Call Auditor")
-st.caption("Stable Version (Gemini 1.5 Flash)")
+st.caption("Stable Version (Gemini 1.5 Flash) - English Only")
 
 # 3. Sidebar
 with st.sidebar:
@@ -45,6 +45,7 @@ if uploaded_file and api_key:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-1.5-flash')
         
+        # الخطوة الأولى: الـ Transcript
         if st.button("Step 1: Extract Transcript 📄"):
             try:
                 with st.spinner("Processing..."):
@@ -62,12 +63,14 @@ if uploaded_file and api_key:
                         st.session_state.transcript = uploaded_file.read().decode("utf-8")
                     st.success("✅ Transcript Ready!")
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Error in Step 1: {e}")
 
+        # عرض النص لو موجود
         if st.session_state.transcript:
             st.subheader("📄 The Transcript")
             st.text_area("Content:", st.session_state.transcript, height=200)
             
+            # الخطوة التانية: التحليل
             if st.button("Step 2: Run Strategic Analysis 🚀"):
                 try:
                     with st.spinner("Analyzing..."):
@@ -98,11 +101,16 @@ if uploaded_file and api_key:
                         """
                         res_analysis = model.generate_content(prompt)
                         st.session_state.analysis = res_analysis.text
-                        st.success("✅ Complete!")
+                        st.success("✅ Audit Complete!")
+                except Exception as e:
+                    st.error(f"Error in Step 2: {e}")
 
+        # عرض التقرير النهائي وزر التحميل
         if st.session_state.analysis:
+            st.divider()
+            st.subheader("🧠 Strategic Audit Report")
             st.markdown(st.session_state.analysis)
-            st.download_button("Download Report", st.session_state.analysis, file_name="Audit.md")
+            st.download_button("Download Report", st.session_state.analysis, file_name=f"Audit_{uploaded_file.name}.md")
 
     except Exception as e:
         st.error(f"Config Error: {e}")
