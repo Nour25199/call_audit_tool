@@ -3,6 +3,8 @@ import google.generativeai as genai
 import tempfile
 import os
 import whisper
+import librosa
+import numpy as np
 
 # --- 1. Page Config ---
 st.set_page_config(page_title="Strategic Auditor 2026", layout="wide")
@@ -10,7 +12,7 @@ st.set_page_config(page_title="Strategic Auditor 2026", layout="wide")
 # Load Whisper (Free & Local)
 @st.cache_resource
 def load_whisper():
-    # 'base' creates a good balance between speed and accuracy
+    # 'base' is good for speed, 'small' is better for accuracy
     return whisper.load_model("base") 
 
 whisper_model = load_whisper()
@@ -25,9 +27,9 @@ st.title("🎙️ AI Strategic Call Auditor")
 # --- 3. Sidebar (API Key Input) ---
 with st.sidebar:
     st.header("⚙️ Configuration")
-    user_api_key = st.text_input("Enter Gemini API Key", type="password", help="Get your key from https://aistudio.google.com/app/apikey")
+    user_api_key = st.text_input("Enter Gemini API Key", type="password")
     st.markdown("---")
-    st.info("Using Whisper Local (FREE) + Gemini 1.5 Flash (Analysis).")
+    st.info("Whisper: Transcription (Local/FREE)\nGemini: Analysis (API)")
 
 # --- 4. Logic Functions ---
 def analyze_with_gemini(transcript, key):
@@ -35,7 +37,7 @@ def analyze_with_gemini(transcript, key):
     model = genai.GenerativeModel('gemini-1.5-flash') 
     prompt = f"""
     Audit this call based on the PILLARS: Motivation, Price, Timeline, Condition, Rapport.
-    Use the CARE Model for objections.
+    Use the CARE Model for objections. Provide a detailed report.
     
     Transcript: {transcript}
     """
@@ -45,7 +47,7 @@ def analyze_with_gemini(transcript, key):
 # --- 5. Main UI ---
 uploaded_file = st.file_uploader("Upload Audio File", type=['wav', 'mp3', 'm4a'])
 
-# RESET LOGIC: Law rafa3na file gadeed, n-faddy el-qadeem
+# RESET LOGIC
 if uploaded_file:
     if st.session_state.last_uploaded_file != uploaded_file.name:
         st.session_state.transcript = ""
@@ -55,22 +57,23 @@ if uploaded_file:
 
     # STEP 1: Transcription
     if st.button("Step 1: Extract Transcript 📄"):
-        with st.spinner("Whisper is transcribing... (This may take a few minutes)"):
+        with st.spinner("Processing audio... (This may take a few minutes for long calls)"):
             try:
-                # Save uploaded file to a temporary location
+                # Save uploaded file locally
                 suffix = f".{uploaded_file.name.split('.')[-1]}"
                 with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                     tmp.write(uploaded_file.getvalue())
                     tmp_path = tmp.name
                 
-                # Check if file is empty
-                if os.path.getsize(tmp_path) == 0:
-                    st.error("The uploaded file is empty.")
-                else:
-                    # Run Whisper with fp16=False to avoid Tensor Reshape errors on CPU
-                    result = whisper_model.transcribe(tmp_path, fp16=False)
-                    st.session_state.transcript = result['text']
-                    st.success("✅ Transcription Done!")
+                # 🚩 EL-7ALL: Convert to Mono 16kHz before Whisper
+                # This fixes the "Tensor Reshape" error 100%
+                audio_data, _ = librosa.load(tmp_path, sr=16000, mono=True)
+                
+                # Run Whisper with fp16=False for CPU stability
+                result = whisper_model.transcribe(audio_data, fp16=False)
+                
+                st.session_state.transcript = result['text']
+                st.success("✅ Transcription Done!")
                 
                 os.remove(tmp_path)
             except Exception as e:
