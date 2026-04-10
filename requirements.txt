@@ -2,3 +2,6 @@ streamlit
 google-generativeai
 openai-whisper
 setuptools-rust
+librosa
+soundfile
+numpy
