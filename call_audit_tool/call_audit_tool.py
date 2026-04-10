@@ -10,7 +10,7 @@ st.set_page_config(page_title="Strategic Auditor 2026", layout="wide")
 # Load Whisper (Free & Local)
 @st.cache_resource
 def load_whisper():
-    # 'base' is fast. Change to 'small' for better Arabic if needed.
+    # 'base' creates a good balance between speed and accuracy
     return whisper.load_model("base") 
 
 whisper_model = load_whisper()
@@ -27,7 +27,7 @@ with st.sidebar:
     st.header("⚙️ Configuration")
     user_api_key = st.text_input("Enter Gemini API Key", type="password", help="Get your key from https://aistudio.google.com/app/apikey")
     st.markdown("---")
-    st.info("Whisper is transcribing locally (FREE). Gemini is for Analysis.")
+    st.info("Using Whisper Local (FREE) + Gemini 1.5 Flash (Analysis).")
 
 # --- 4. Logic Functions ---
 def analyze_with_gemini(transcript, key):
@@ -45,7 +45,7 @@ def analyze_with_gemini(transcript, key):
 # --- 5. Main UI ---
 uploaded_file = st.file_uploader("Upload Audio File", type=['wav', 'mp3', 'm4a'])
 
-# 🚩 RESET LOGIC: Law rafa3na file gadeed, n-faddy el-qadeem
+# RESET LOGIC: Law rafa3na file gadeed, n-faddy el-qadeem
 if uploaded_file:
     if st.session_state.last_uploaded_file != uploaded_file.name:
         st.session_state.transcript = ""
@@ -55,17 +55,24 @@ if uploaded_file:
 
     # STEP 1: Transcription
     if st.button("Step 1: Extract Transcript 📄"):
-        with st.spinner("Whisper is transcribing locally... Please wait."):
+        with st.spinner("Whisper is transcribing... (This may take a few minutes)"):
             try:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+                # Save uploaded file to a temporary location
+                suffix = f".{uploaded_file.name.split('.')[-1]}"
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                     tmp.write(uploaded_file.getvalue())
                     tmp_path = tmp.name
                 
-                # Run Whisper
-                result = whisper_model.transcribe(tmp_path)
-                st.session_state.transcript = result['text']
+                # Check if file is empty
+                if os.path.getsize(tmp_path) == 0:
+                    st.error("The uploaded file is empty.")
+                else:
+                    # Run Whisper with fp16=False to avoid Tensor Reshape errors on CPU
+                    result = whisper_model.transcribe(tmp_path, fp16=False)
+                    st.session_state.transcript = result['text']
+                    st.success("✅ Transcription Done!")
+                
                 os.remove(tmp_path)
-                st.success("✅ Transcription Done!")
             except Exception as e:
                 st.error(f"Transcription Error: {e}")
 
